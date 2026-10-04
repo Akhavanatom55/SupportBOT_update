@@ -13,4 +13,5 @@ COPY . .
 
 RUN mkdir -p /data
 
-CMD ["python", "main.py"]
+# Start the database/bootstrap sequence and then keep the Bale updater alive.
+CMD ["python", "-u", "runner.py"]
