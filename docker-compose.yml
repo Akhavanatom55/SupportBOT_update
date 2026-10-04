@@ -1,0 +1,12 @@
+services:
+  support-bot:
+    build: .
+    container_name: support-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - support_bot_data:/data
+
+volumes:
+  support_bot_data:
