@@ -1,31 +1,55 @@
-# SupportBOT — Bale Support + Web Admin
+# SupportBOT — Bale + Gemini + Web Admin (Unified)
 
-ربات پشتیبانی کامل برای پیام‌رسان **بله** به همراه پنل مدیریت وب. ربات و پنل در یک پروژه Next.js اجرا می‌شوند و PostgreSQL برای نگهداری کاربران، تیکت‌ها، پیام‌ها، FAQ، پاسخ‌های آماده، کلیدهای Gemini و تنظیمات استفاده می‌شود.
+این نسخه یک پروژه واحد برای **ربات پشتیبانی بله + پنل مدیریت وب** است. ربات و سایت داخل **یک Next.js service و یک Docker container** اجرا می‌شوند و هر دو از یک دیتابیس SQLite مشترک استفاده می‌کنند.
 
-## قابلیت‌ها
+این معماری برای Deplexo طراحی شده تا به `aiosqlite` و Threadهای اضافی Python وابسته نباشد و خطای `RuntimeError: can't start new thread` ایجاد نکند.
 
-- دریافت درخواست کاربران در Bale
-- ساخت Ticket برای هر درخواست
-- ارسال درخواست و پیام‌های جدید برای ادمین‌ها و گروه پشتیبانی
-- پاسخ مستقیم ادمین به کاربر از داخل Bale
-- امکان تحویل گرفتن Ticket توسط ادمین و توقف پاسخ هوش مصنوعی
-- FAQ قابل مدیریت از پنل
-- پاسخ‌های آماده قابل مدیریت و پاسخ خودکار بر اساس کلمات کلیدی
-- پیام‌های fallback در صورت خاموش بودن AI یا تمام شدن سهمیه Gemini
-- چند Gemini API Key با چرخش خودکار هنگام Quota/429
-- خطاهای Gemini فقط برای ادمین‌ها گزارش می‌شوند؛ متن خطا به کاربر نمایش داده نمی‌شود
-- انتخاب مدل Gemini از پنل
-- مدیریت ادمین‌های Bale
-- مدیریت کاربران پنل وب
-- Broadcast
-- آمار Dashboard
-- امتیازدهی کاربران به پشتیبانی
-- Backup/Restore کامل PostgreSQL به‌صورت JSON
-- ثبت و مدیریت Webhook از پنل
-- Health endpoint برای مانیتورینگ
-- Dockerfile آماده برای Deploy
+## امکانات اصلی
 
-## ساختار کلی
+### ربات بله
+
+- `/start` و منوی اصلی با دکمه‌های ثبت درخواست، سوالات متداول و درباره ما
+- Ticket مجزا برای هر کاربر
+- ارسال همزمان درخواست کاربر برای ادمین‌ها و گروه پشتیبانی
+- پاسخ ادمین به کاربر از داخل چت بله
+- اختصاص Ticket به ادمین، توقف/فعال‌سازی AI و بستن Ticket
+- امتیازدهی کاربر پس از پایان گفتگو
+- FAQ با صفحه‌بندی و شمارش بازدید
+- پاسخ‌های آماده دستی و پاسخ‌های خودکار بر اساس کلمات کلیدی
+- Fallback خودکار هنگام خاموش بودن AI یا خطا/Quota جمنای
+- خطای فنی Gemini هیچ‌وقت برای کاربر نمایش داده نمی‌شود و فقط برای ادمین‌ها گزارش می‌شود
+
+### Gemini
+
+- چند API Key در دیتابیس
+- اولویت‌بندی کلیدها
+- سوییچ خودکار هنگام 429 / quota / rate limit
+- علامت‌گذاری کلید exhausted و خارج کردن آن از چرخه تا زمان بازیابی
+- استفاده از کلید بعدی برای همان درخواست
+- انتخاب Model ID از پنل
+- System Prompt کاملاً قابل ویرایش از پنل
+- در صورت شکست همه کلیدها، کاربر فقط پیام آماده دریافت می‌کند
+
+### پنل وب `/admin`
+
+- Dashboard و آمار
+- مدیریت Ticketها
+- مدیریت چند Gemini API Key
+- FAQ: ایجاد، ویرایش، انتشار و حذف
+- پاسخ‌های آماده: ایجاد، ویرایش، فعال/غیرفعال و Auto-suggest
+- مدیریت ادمین‌های بله
+- مدیریت حساب‌های پنل وب
+- تغییر نام کاربری و رمز حسابی که همین حالا وارد پنل شده
+- تغییر تنظیمات و پیام‌های ربات بدون دستکاری کد
+- Broadcast به کاربران
+- ثبت / حذف / بررسی Webhook بله
+- مشاهده و کپی لینک پنل
+- دکمه **ارسال لینک پنل برای تمام ادمین‌های بله** با دکمه مستقیم «ورود به پنل مدیریت»
+- Export کامل دیتابیس
+- Import/Restore کامل دیتابیس
+- Health endpoint
+
+## ساختار
 
 ```text
 Bale User
@@ -34,182 +58,248 @@ Bale User
 Bale Bot API
    │
    ▼
-Next.js / Webhook ─────► Gemini API pool
+Next.js Webhook + Bot Logic
+   ├──────────────► Gemini API pool
    │
-   ▼
-PostgreSQL
+   ├──────────────► Web Admin /admin
    │
-   └──── Web Admin (/admin)
+   └──────────────► SQLite /data/support_bot.db
 ```
 
-## راه‌اندازی با Docker
+## متغیرهای محیطی — آماده Copy/Paste برای Deplexo
 
-### 1. فایل محیطی
-
-فایل `.env.example` را به `.env` تبدیل کنید و مقادیر را وارد کنید.
-
-```bash
-cp .env.example .env
-```
-
-### 2. PostgreSQL
-
-یک PostgreSQL در سرور/Deplexo بسازید و مقدار `DATABASE_URL` را وارد کنید.
-
-نمونه:
+کل این بلوک را کپی کنید و مقدار هر مورد را وارد کنید:
 
 ```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-```
+# =========================================================
+# SupportBOT - DEPLEXO ENVIRONMENT VARIABLES
+# =========================================================
 
-### 3. Build
-
-```bash
-docker build -t supportbot .
-```
-
-### 4. Run
-
-```bash
-docker run --env-file .env -p 3000:3000 supportbot
-```
-
-Container هنگام startup با `drizzle-kit push` ساختار دیتابیس را با schema پروژه هماهنگ می‌کند و سپس Next.js را اجرا می‌کند.
-
-## متغیرهای محیطی
-
-همه متغیرهای لازم در `.env.example` قرار دارند:
-
-```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
 BALE_BOT_TOKEN=
-ADMIN_IDS=123456,789012
+BOT_TOKEN=
+ADMIN_IDS=123456789,987654321
 GROUP_CHAT_ID=
+
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.5-flash-lite
+
+DATABASE_PATH=/data/support_bot.db
+
 ADMIN_PANEL_USERNAME=admin
-ADMIN_PANEL_PASSWORD=CHANGE_THIS
-SESSION_SECRET=CHANGE_THIS_TO_A_LONG_RANDOM_SECRET
-PUBLIC_BASE_URL=https://YOUR-DOMAIN.example
-WEBHOOK_SECRET=CHANGE_THIS_TO_A_RANDOM_SECRET
+ADMIN_PANEL_PASSWORD=CHANGE_THIS_TO_A_STRONG_PASSWORD
+SESSION_SECRET=CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS
+
+PUBLIC_BASE_URL=
+WEBHOOK_SECRET=CHANGE_THIS_TO_A_LONG_RANDOM_SECRET
+
 BOT_NAME=ربات پشتیبانی
 ORGANIZATION_NAME=تیم پشتیبانی
+
+PORT=3000
 ```
 
-`GEMINI_API_KEY` در محیط فقط نقش کلید پشتیبان اولیه دارد؛ روش اصلی، اضافه کردن چند کلید از پنل `/admin/gemini` است.
+### توضیح متغیرهای مهم
 
-## مدل Gemini
+`BALE_BOT_TOKEN` توکن اصلی ربات بله است.
 
-مدل پیش‌فرض پروژه `gemini-3.5-flash-lite` است. مدل‌های پایدار پیشنهادی فعلی برای این پروژه:
+`BOT_TOKEN` فقط برای سازگاری با نسخه قدیمی Python نگه داشته شده؛ در نسخه جدید مقدار `BALE_BOT_TOKEN` اولویت دارد.
 
-- `gemini-3.5-flash-lite` — مناسب برای پاسخ‌های پرتعداد و کم‌هزینه
-- `gemini-3.6-flash` — قوی‌تر برای پاسخ‌های پیچیده‌تر
-- `gemini-3.1-flash-lite` — گزینه اقتصادی پایدار
+`ADMIN_IDS` شناسه عددی اولیه ادمین‌های بله است و با کاما جدا می‌شود. بعد از Deploy می‌توان ادمین‌ها را از `/admin/admins` مدیریت کرد.
 
-> نکته: نام مدل باید دقیقاً همان Model ID رسمی Google باشد. مدل مستقلی با نام `gemini-3.6-flash-lite` وجود ندارد؛ 3.6 Flash و 3.5 Flash-Lite دو مدل جدا هستند.
+`GROUP_CHAT_ID` شناسه گروهی است که تیم پشتیبانی داخل آن تیکت‌ها و هشدارها را می‌بیند.
 
-## پنل مدیریت
+`GEMINI_API_KEY` یک کلید اولیه/پشتیبان است. روش اصلی توصیه‌شده، اضافه کردن چند کلید از `/admin/gemini` است.
 
-بعد از اجرا:
+`DATABASE_PATH` را روی `/data/support_bot.db` نگه دارید تا بتوانید برای `/data` یک volume پایدار در Deplexo تنظیم کنید.
+
+`ADMIN_PANEL_USERNAME` و `ADMIN_PANEL_PASSWORD` اطلاعات ورود اولیه هستند. بعد از اولین ورود، از `/admin/admins` می‌توانید نام کاربری و رمز حساب خودتان را تغییر دهید.
+
+`SESSION_SECRET` باید طولانی و تصادفی باشد و در Deploy ثابت بماند.
+
+`PUBLIC_BASE_URL` آدرس عمومی Deploy است، مثلاً:
+
+```text
+https://support.example.com
+```
+
+`WEBHOOK_SECRET` در مسیر Webhook بله استفاده می‌شود. بهتر است مقدار ثابت و تصادفی باشد.
+
+## Deploy در Deplexo
+
+### 1. Repository
+
+این پروژه را به GitHub Push کنید.
+
+### 2. Docker
+
+Deploy method را روی Dockerfile قرار دهید.
+
+Dockerfile این پروژه یک container واحد می‌سازد و در پایان فقط Next.js را اجرا می‌کند.
+
+### 3. Port
+
+پورت سرویس `3000` است. اگر Deplexo مقدار `PORT` متفاوتی تزریق می‌کند، مقدار همان متغیر استفاده می‌شود.
+
+### 4. Volume
+
+برای جلوگیری از پاک شدن کاربران، Ticketها، FAQ، کلیدهای Gemini و تنظیمات، حتماً یک Volume پایدار برای مسیر زیر تعریف کنید:
+
+```text
+/data
+```
+
+فایل دیتابیس در این مسیر ساخته می‌شود:
+
+```text
+/data/support_bot.db
+```
+
+### 5. Environment Variables
+
+تمام متغیرهای داخل بلوک بالا را در Environment Variables پروژه وارد کنید.
+
+### 6. اجرای سایت
+
+بعد از Deploy:
 
 ```text
 https://YOUR-DOMAIN/admin
 ```
 
-ورود اولیه از این متغیرها انجام می‌شود:
+### 7. ثبت Webhook
 
-```env
-ADMIN_PANEL_USERNAME=admin
-ADMIN_PANEL_PASSWORD=CHANGE_THIS
+بعد از ورود به پنل به بخش:
+
+```text
+تنظیمات ربات → اتصال وبهوک بله
 ```
 
-بعد از ورود می‌توانید موارد زیر را بدون تغییر کد مدیریت کنید:
+بروید، `PUBLIC_BASE_URL` را بررسی کنید و «ثبت وبهوک» را بزنید.
 
-- Gemini API Keys
-- مدل Gemini
-- فعال/غیرفعال کردن AI
-- FAQ
-- پاسخ‌های آماده
-- ادمین‌ها
-- کاربران وب
-- Ticketها
-- تنظیمات پیام‌ها
-- Broadcast
-- Backup/Restore
-- Webhook
-
-## اتصال Webhook بله
-
-در پنل مدیریت قسمت Webhook را باز کنید و ثبت Webhook را انجام دهید.
-
-ساختار endpoint:
+Webhook به این شکل خواهد بود:
 
 ```text
 https://YOUR-DOMAIN/api/bale/webhook/YOUR_WEBHOOK_SECRET
 ```
 
-اگر `WEBHOOK_SECRET` در `.env` خالی باشد، مقدار امن توسط seed اولیه تولید و در تنظیمات ذخیره می‌شود؛ با این حال برای Deploy پایدار توصیه می‌شود مقدار ثابت و تصادفی در `.env` قرار دهید.
+## لینک پنل برای ادمین‌ها
 
-## نکته مهم درباره Gemini Quota
+در بخش تنظیمات پنل، قسمت:
 
-ترتیب عملکرد:
+```text
+🔗 لینک پنل مدیریت سایت
+```
 
-1. کلید فعال با بالاترین priority امتحان می‌شود.
-2. اگر 429/Quota/Rate Limit رخ دهد، کلید در دیتابیس به‌صورت موقت exhausted می‌شود.
-3. ربات همان درخواست را با کلید بعدی امتحان می‌کند.
-4. اگر کلید دیگری موجود باشد، کاربر هیچ خطایی مشاهده نمی‌کند.
-5. اگر همه کلیدها ناموفق باشند، فقط پیام آماده به کاربر ارسال می‌شود.
-6. جزئیات خطا فقط برای ادمین‌ها ارسال می‌شود.
+سه قابلیت دارید:
+
+- مشاهده URL پنل
+- کپی URL
+- ارسال لینک برای همه ادمین‌های بله
+
+پیام ارسالی به ادمین‌ها شامل یک دکمه مستقیم **«🔐 ورود به پنل مدیریت»** است.
+
+## تغییر نام کاربری و رمز پنل
+
+به:
+
+```text
+/admin/admins
+```
+
+بروید و بخش:
+
+```text
+🔐 حساب ورود ادمین فعلی
+```
+
+را باز کنید.
+
+برای تغییر مشخصات، رمز عبور فعلی لازم است. بعد از تغییر نام کاربری، session جدید به‌صورت خودکار صادر می‌شود و ادمین بدون Logout اجباری در پنل باقی می‌ماند.
+
+رمز جدید حداقل ۸ کاراکتر باشد.
 
 ## Backup / Restore
 
-از پنل Backup می‌توانید یک فایل JSON کامل دریافت کنید. این فایل شامل کاربران، ادمین‌ها، Ticketها، پیام‌ها، FAQها، پاسخ‌های آماده، تنظیمات، کلیدهای Gemini و کاربران پنل است.
+در:
 
-**فایل Backup را محرمانه نگه دارید** چون شامل داده‌های حساس سیستم است.
-
-برای Restore، فایل Backup را از همان صفحه انتخاب کنید. قبل از Restore، دیتابیس فعلی پاک و اطلاعات Backup جایگزین می‌شود.
-
-## Deploy در Deplexo
-
-اگر Deplexo یک Docker deployment استاندارد ارائه می‌دهد:
-
-1. Repository را به GitHub Push کنید.
-2. پروژه را در Deplexo به GitHub متصل کنید.
-3. نوع Deploy را Docker/Container انتخاب کنید.
-4. Port را روی `3000` قرار دهید.
-5. PostgreSQL را ایجاد کنید یا PostgreSQL خارجی متصل کنید.
-6. تمام متغیرهای `.env.example` را در Environment Variables وارد کنید.
-7. Deploy را اجرا کنید.
-8. بعد از بالا آمدن سایت، `/admin` را باز کنید.
-9. از پنل Gemini کلیدهای API را اضافه کنید.
-10. از پنل Webhook را برای Bale ثبت کنید.
-
-## تست سریع
-
-```bash
-curl https://YOUR-DOMAIN/api/health
+```text
+/admin/backup
 ```
 
-باید پاسخ JSON سالم دریافت شود.
+می‌توانید از کل دیتابیس Backup بگیرید.
+
+Backup شامل این موارد است:
+
+- کاربران بله
+- ادمین‌های بله
+- Ticketها
+- تمام پیام‌های Ticket
+- Gemini API Keyها و وضعیت آنها
+- تنظیمات ربات
+- FAQ
+- پاسخ‌های آماده
+- حساب‌های پنل وب
+- سابقه Broadcast
+
+**Backup را عمومی یا داخل GitHub قرار ندهید.** فایل Backup شامل اطلاعات حساس است.
+
+در Restore، اطلاعات فعلی به‌صورت کامل پاک و محتوای Backup جایگزین می‌شود.
+
+## مهاجرت از نسخه قدیمی Python
+
+نسخه قبلی Repository یک Bot Python با `aiosqlite` بود. نسخه جدید به‌صورت کامل به معماری Next.js + SQLite منتقل شده است.
+
+اگر قبلاً یک دیتابیس قدیمی در مسیر `/data/support_bot.db` داشته‌اید، برنامه در اولین اجرا Layout قدیمی Python را تشخیص می‌دهد و کاربران، Ticketها و پیام‌های قابل انتقال را به ساختار جدید منتقل می‌کند.
+
+برای محافظت بیشتر، قبل از Deploy نسخه جدید حتماً از فایل دیتابیس فعلی Backup بگیرید.
+
+## فایل‌هایی که از Repository قدیمی باید حذف شوند
+
+چون ZIP نمی‌تواند فایل‌های اضافه موجود در GitHub را خودکار حذف کند، اگر این فایل‌ها هنوز در Repository قدیمی وجود دارند، آنها را Delete کنید:
+
+```text
+main.py
+runner.py
+config.py
+database.py
+gemini_service.py
+keyboards.py
+requirements.txt
+railway.toml
+docker-compose.yml
+```
+
+Dockerfile جدید، `package.json` جدید و تمام پوشه `src/` نسخه جدید را نگه دارید.
+
+## تست Health
+
+بعد از Deploy:
+
+```text
+https://YOUR-DOMAIN/api/health
+```
+
+باید JSON شبیه زیر دریافت شود:
+
+```json
+{"ok":true}
+```
+
+## رفع خطای قبلی Deplexo
+
+خطای قبلی:
+
+```text
+RuntimeError: can't start new thread
+```
+
+در Stack Trace داخل `aiosqlite.connect()` رخ داده بود. نسخه فعلی دیگر `aiosqlite` یا Python Bot را اجرا نمی‌کند؛ بنابراین این مسیر ایجاد Thread اضافی در سرویس اصلی حذف شده است.
 
 ## نکات امنیتی
 
-- `ADMIN_PANEL_PASSWORD` را عوض کنید.
-- `SESSION_SECRET` طولانی و تصادفی باشد.
-- `WEBHOOK_SECRET` طولانی و تصادفی باشد.
-- Backup را عمومی یا داخل GitHub قرار ندهید.
-- `.env` را Commit نکنید.
-- API Keyهای Gemini را در کد قرار ندهید.
-
-## GitHub
-
-محتویات همین پوشه را در Repository قرار دهید. فایل‌های جدید این نسخه:
-
-```text
-Dockerfile
-.dockerignore
-docker-entrypoint.sh
-README.md
-```
-
-فایل‌های هم‌نام قبلی را Replace کنید.
+- `ADMIN_PANEL_PASSWORD` را مقدار پیش‌فرض نگذارید.
+- `SESSION_SECRET` و `WEBHOOK_SECRET` را تصادفی و طولانی قرار دهید.
+- Backup دیتابیس را محرمانه نگه دارید.
+- API Key جمنای را Commit نکنید.
+- `.env` را وارد GitHub نکنید.
+- برای `/data` از Volume پایدار استفاده کنید.
