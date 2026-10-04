@@ -1,26 +1,12 @@
-import { NextResponse } from "next/server";
 import { db } from "@/db";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await db.run("SELECT 1");
-
-    return NextResponse.json({
-      status: "ok",
-      database: "connected",
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("Health check failed:", error);
-
-    return NextResponse.json(
-      {
-        status: "error",
-        database: "failed",
-      },
-      {
-        status: 500,
-      }
-    );
+    db.$client.prepare("select 1").get();
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json({ ok: false }, { status: 500 });
   }
 }
