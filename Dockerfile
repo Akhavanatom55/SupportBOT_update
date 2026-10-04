@@ -38,4 +38,4 @@ RUN mkdir -p /data && chown -R node:node /data
 USER node
 
 EXPOSE 3000
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "/app/docker-entrypoint.sh"]
